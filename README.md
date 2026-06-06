@@ -32,3 +32,10 @@ Risk Classes:
 - Low Risk
 - Medium Risk
 - High Risk
+
+## Results
+
+- Accuracy: 94%
+- Precision: 94.27%
+- Recall: 94%
+- F1 Score: 93.6%
