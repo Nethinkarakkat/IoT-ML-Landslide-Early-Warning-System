@@ -1,0 +1,156 @@
+#include <WiFi.h>
+#include <ThingSpeak.h>
+#include <Wire.h>
+#include <MPU6050.h>
+#include "DHT.h"
+
+MPU6050 mpu;
+
+#define DHTPIN 4
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
+
+// WiFi
+const char* ssid = "********";
+const char* password = "********";
+
+// ThingSpeak
+unsigned long channelID = 3290678;
+const char* writeAPIKey = "********";
+
+WiFiClient client;
+
+// Sensor Pins
+int soilPin = 34;
+int rainPin = 27;
+
+// LEDs
+int greenLED = 18;
+int yellowLED = 19;
+int redLED = 23;
+
+// Buzzer
+int buzzer = 5;
+
+void setup() {
+
+  Serial.begin(115200);
+
+  pinMode(rainPin, INPUT);
+
+  pinMode(greenLED, OUTPUT);
+  pinMode(yellowLED, OUTPUT);
+  pinMode(redLED, OUTPUT);
+
+  pinMode(buzzer, OUTPUT);
+
+  dht.begin();
+
+  Wire.begin();
+
+  mpu.initialize();
+
+  if (mpu.testConnection()) {
+    Serial.println("MPU6050 connected");
+  } else {
+    Serial.println("MPU6050 connection failed");
+  }
+
+  Serial.print("Connecting to WiFi");
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println(" WiFi Connected");
+
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+
+  int soil = analogRead(soilPin);
+  int rain = digitalRead(rainPin);
+
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+
+  int16_t ax, ay, az;
+
+  mpu.getAcceleration(&ax, &ay, &az);
+
+  float angle = atan2(ay, az) * 180 / PI;
+
+  Serial.println("------ Sensor Values ------");
+
+  Serial.print("Soil Moisture: ");
+  Serial.println(soil);
+
+  Serial.print("Rain: ");
+  Serial.println(rain);
+
+  Serial.print("Temperature: ");
+  Serial.println(temp);
+
+  Serial.print("Humidity: ");
+  Serial.println(hum);
+
+  Serial.print("Tilt Angle: ");
+  Serial.println(angle);
+
+  int risk = 0;
+
+  if (soil < 1600 && rain == 0 && abs(angle) > 8) {
+    risk = 2;
+  }
+  else if (soil < 2300 && rain == 0) {
+    risk = 1;
+  }
+  else {
+    risk = 0;
+  }
+
+  digitalWrite(greenLED, LOW);
+  digitalWrite(yellowLED, LOW);
+  digitalWrite(redLED, LOW);
+  noTone(buzzer);
+
+  if (risk == 0) {
+
+    Serial.println("LOW RISK");
+    digitalWrite(greenLED, HIGH);
+
+  }
+
+  if (risk == 1) {
+
+    Serial.println("MEDIUM RISK");
+    digitalWrite(yellowLED, HIGH);
+
+  }
+
+  if (risk == 2) {
+
+    Serial.println("HIGH RISK");
+    digitalWrite(redLED, HIGH);
+    tone(buzzer, 2000);
+
+  }
+
+  ThingSpeak.setField(1, soil);
+  ThingSpeak.setField(2, rain);
+  ThingSpeak.setField(3, temp);
+  ThingSpeak.setField(4, hum);
+  ThingSpeak.setField(5, angle);
+
+  ThingSpeak.writeFields(channelID, writeAPIKey);
+
+  Serial.println("Data sent to ThingSpeak");
+  Serial.println("---------------------------");
+
+  delay(15000);
+}
